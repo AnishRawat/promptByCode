@@ -6,7 +6,7 @@ import "prismjs/components/prism-jsx";
 import "prismjs/components/prism-javascript";
 import "prismjs/components/prism-css";
 import "prismjs/components/prism-markup";
-import { FaCloudUploadAlt, FaCopy, FaCheck, FaExclamationCircle, FaSpinner, FaFolderOpen, FaFile, FaChevronDown, FaChevronRight } from "react-icons/fa";
+import { FaCloudUploadAlt, FaCopy, FaCheck, FaExclamationCircle, FaSpinner, FaFolderOpen, FaFile, FaChevronDown, FaChevronRight, FaFileCode } from "react-icons/fa";
 
 export default function FolderUploader() {
   const [fileTree, setFileTree] = useState({ name: "Root", children: [], isDirectory: true });
@@ -22,9 +22,20 @@ export default function FolderUploader() {
   const [isFilesOpen, setIsFilesOpen] = useState(true);
   const [isPromptOpen, setIsPromptOpen] = useState(false);
 
+  const [pendingFiles, setPendingFiles] = useState(null);
+  const [isReadingFiles, setIsReadingFiles] = useState(false); // Loading state for upload
+  const [isSummarizing, setIsSummarizing] = useState(false); // Loading state for summarization
+
+  const [showSelectedDrawer, setShowSelectedDrawer] = useState(false); // Drawer state
+
   const containerRef = useRef();
   const leftRef = useRef();
   const isResizing = useRef(false);
+
+  // Bottom Panel State
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(200); // Default height
+  const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(true);
+  const isResizingBottom = useRef(false);
 
   // --- File Processing Logic ---
 
@@ -49,7 +60,8 @@ export default function FolderUploader() {
     ];
 
     try {
-      for (const file of files) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         // Determine path
         const path = file.webkitRelativePath || file.name;
         const parts = path.split("/").filter(Boolean);
@@ -76,17 +88,17 @@ export default function FolderUploader() {
         }
 
         let current = newTree;
-        for (let i = 0; i < parts.length; i++) {
-          const part = parts[i];
+        for (let j = 0; j < parts.length; j++) {
+          const part = parts[j];
           let node = current.children.find((c) => c.name === part);
 
           if (!node) {
-            const isFile = i === parts.length - 1;
+            const isFile = j === parts.length - 1;
             node = {
               name: part,
               children: [],
               isFile: isFile,
-              path: parts.slice(0, i + 1).join("/"),
+              path: parts.slice(0, j + 1).join("/"),
               id: `${path}-${Date.now()}-${Math.random()}`,
             };
             current.children.push(node);
@@ -109,10 +121,14 @@ export default function FolderUploader() {
             current.content = `Error reading file: ${readError.message}`;
           }
         }
+
+        // Yield to main thread every 10 files to keep UI responsive
+        if (i % 10 === 0) await new Promise(resolve => setTimeout(resolve, 0));
       }
       setFileTree(newTree);
-      // Auto-expand file tree section if files are loaded
+      // Auto-expand file tree section and collapse upload section
       setIsFilesOpen(true);
+      setIsUploadOpen(false);
     } catch (err) {
       console.error("Error processing files:", err);
       setError("Failed to process uploaded files.");
@@ -122,7 +138,14 @@ export default function FolderUploader() {
   };
 
   const handleFileInput = (e) => {
-    processFiles(e.target.files);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setIsReadingFiles(true);
+      // Small delay to allow UI to render loader
+      setTimeout(() => {
+        processFiles(files).then(() => setIsReadingFiles(false));
+      }, 100);
+    }
   };
 
   // --- Drag and Drop for File Upload ---
@@ -150,7 +173,10 @@ export default function FolderUploader() {
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFiles(e.dataTransfer.files);
+      setIsReadingFiles(true);
+      setTimeout(() => {
+        processFiles(e.dataTransfer.files).then(() => setIsReadingFiles(false));
+      }, 100);
     }
   };
 
@@ -178,6 +204,7 @@ export default function FolderUploader() {
     }
 
     setLoading(true);
+    setIsSummarizing(true); // Show full screen loader
     setError("");
     setSummary("");
 
@@ -191,13 +218,11 @@ export default function FolderUploader() {
     console.log("📝 Custom Prompt:", customPrompt);
 
     try {
-      const response = await fetch("http://localhost:5000/summarize", {
+      // Send to backend (Vercel API route)
+      const response = await fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          selectedFiles: payload,
-          customPrompt: customPrompt
-        }),
+        body: JSON.stringify({ selectedFiles: payload, customPrompt: customPrompt }),
       });
 
       if (!response.ok) {
@@ -216,6 +241,7 @@ export default function FolderUploader() {
       setError(err.message);
     } finally {
       setLoading(false);
+      setIsSummarizing(false);
     }
   };
 
@@ -236,19 +262,29 @@ export default function FolderUploader() {
     document.body.style.userSelect = "none";
   };
 
-  const stopResize = () => {
-    isResizing.current = false;
-    document.body.style.cursor = "default";
-    document.body.style.userSelect = "auto";
-  };
+
 
   const resize = (e) => {
-    if (!isResizing.current) return;
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const newWidth = e.clientX - containerRect.left;
-    if (newWidth > 250 && newWidth < containerRect.width - 400) {
-      leftRef.current.style.width = `${newWidth}px`;
+    if (isResizing.current) {
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidth = e.clientX - containerRect.left;
+      if (newWidth > 250 && newWidth < containerRect.width - 400) {
+        leftRef.current.style.width = `${newWidth}px`;
+      }
     }
+    if (isResizingBottom.current) {
+      const newHeight = window.innerHeight - e.clientY;
+      if (newHeight > 40 && newHeight < window.innerHeight - 100) {
+        setBottomPanelHeight(newHeight);
+      }
+    }
+  };
+
+  const stopResize = () => {
+    isResizing.current = false;
+    isResizingBottom.current = false;
+    document.body.style.cursor = "default";
+    document.body.style.userSelect = "auto";
   };
 
   useEffect(() => {
@@ -262,7 +298,7 @@ export default function FolderUploader() {
 
   // --- UI Components ---
 
-  const SectionHeader = ({ title, isOpen, onClick }) => (
+  const SectionHeader = ({ title, isOpen, onClick, badge }) => (
     <div
       onClick={onClick}
       style={{
@@ -272,15 +308,26 @@ export default function FolderUploader() {
         alignItems: "center",
         cursor: "pointer",
         userSelect: "none",
-        background: "#f8f9fa",
-        borderBottom: "1px solid #e9ecef",
-        borderTop: "1px solid #e9ecef",
+        background: isOpen ? "#f1f5f9" : "#f8f9fa", // Darker when open
+        borderBottom: "2px solid #cbd5e1", // Thicker border
+        borderTop: "2px solid #cbd5e1", // Thicker border
+        transition: "background 0.2s",
       }}
     >
-      <h3 style={{ margin: 0, fontSize: "0.9rem", fontWeight: 600, color: "#495057", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-        {title}
-      </h3>
-      {isOpen ? <FaChevronDown color="#adb5bd" /> : <FaChevronRight color="#adb5bd" />}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <h3 style={{ margin: 0, fontSize: "0.9rem", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          {title}
+        </h3>
+        {badge && (
+          <span style={{
+            background: "#3b82f6", color: "white", fontSize: "0.75rem", padding: "2px 8px",
+            borderRadius: "12px", fontWeight: 600
+          }}>
+            {badge}
+          </span>
+        )}
+      </div>
+      {isOpen ? <FaChevronDown color="#64748b" /> : <FaChevronRight color="#94a3b8" />}
     </div>
   );
 
@@ -302,37 +349,55 @@ export default function FolderUploader() {
         style={{
           width: "350px",
           minWidth: "250px",
-          background: "#ffffff",
-          borderRight: "1px solid #e9ecef",
+          background: "#cbd5e1", // 20% more grayish (was #e2e8f0)
+          borderRight: "2px solid #cbd5e1", // Thicker border
           display: "flex",
           flexDirection: "column",
           zIndex: 10,
           boxShadow: "2px 0 10px rgba(0,0,0,0.02)",
-          overflow: "hidden", // Prevent overflow on parent
+          overflow: "visible", // Allow drawer to stick out
+          position: "relative"
         }}
       >
-        {/* Header - Fixed */}
+        {/* Header - Fixed with Watermark */}
         <div style={{
           padding: "20px 24px",
           borderBottom: "1px solid #e9ecef",
           flexShrink: 0,
           background: "linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%)",
+          position: "relative",
+          overflow: "hidden",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center" // Center the text
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <img
-              src="/assets/PromptByCode.png"
-              alt="PromptByCode Logo"
-              style={{
-                width: "50px",
-                height: "50px",
-                borderRadius: "0",
-                filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.3))"
-              }}
-            />
-            <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, color: "#ffffff" }}>
-              PromptByCode
-            </h1>
-          </div>
+          {/* Watermark Logo */}
+          <img
+            src="/assets/PromptByCode.png"
+            alt=""
+            style={{
+              position: "absolute",
+              height: "120%", // Big but contained vertically
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              opacity: 0.15, // Fading in effect
+              pointerEvents: "none",
+              filter: "grayscale(100%) brightness(200%)" // Make it white-ish to blend with gradient
+            }}
+          />
+
+          <h1 style={{
+            margin: 0,
+            fontSize: "1.5rem",
+            fontWeight: 700,
+            color: "#ffffff",
+            position: "relative",
+            zIndex: 2,
+            textShadow: "0 2px 4px rgba(0,0,0,0.2)"
+          }}>
+            PromptByCode
+          </h1>
         </div>
 
         {/* Scrollable Content Area */}
@@ -387,24 +452,6 @@ export default function FolderUploader() {
             </div>
           )}
 
-          {/* File Tree Section */}
-          <SectionHeader title="Project Files" isOpen={isFilesOpen} onClick={() => setIsFilesOpen(!isFilesOpen)} />
-
-          {isFilesOpen && (
-            <div style={{ overflowY: "auto", padding: "10px 12px", animation: "fadeIn 0.3s ease" }}>
-              <div style={{ padding: "0 12px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "0.8rem", color: "#adb5bd", fontWeight: 600 }}>
-                  {selectedFiles.length > 0 ? `${selectedFiles.length} selected` : "No files selected"}
-                </span>
-              </div>
-              <FileTree
-                tree={fileTree}
-                selectedFiles={selectedFiles}
-                setSelectedFiles={setSelectedFiles}
-              />
-            </div>
-          )}
-
           {/* Custom Prompt Section - Collapsible */}
           <SectionHeader title="Custom Instruction" isOpen={isPromptOpen} onClick={() => setIsPromptOpen(!isPromptOpen)} />
 
@@ -424,16 +471,44 @@ export default function FolderUploader() {
                   resize: "vertical",
                   minHeight: "80px",
                   background: "#f8f9fa",
+                  color: "#1e293b", // Dark text for visibility
                   outline: "none",
                   boxSizing: "border-box"
                 }}
               />
             </div>
           )}
+
+          {/* Project Files Section */}
+          <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <SectionHeader
+              title="Project Files"
+              isOpen={isFilesOpen}
+              onClick={() => setIsFilesOpen(!isFilesOpen)}
+            />
+
+            {isFilesOpen && (
+              <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
+                {/* Main Tree View */}
+                <div style={{
+                  height: "100%",
+                  overflowY: "auto",
+                  padding: "10px 12px",
+                  background: "#cbd5e1" // Match panel background
+                }}>
+                  <FileTree
+                    tree={fileTree}
+                    selectedFiles={selectedFiles}
+                    setSelectedFiles={setSelectedFiles}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Action Bar - Fixed at bottom */}
-        <div style={{ padding: "20px 24px", borderTop: "1px solid #f1f3f5", background: "#ffffff", flexShrink: 0 }}>
+        <div style={{ padding: "20px 24px", borderTop: "1px solid #94a3b8", background: "#cbd5e1", flexShrink: 0 }}>
           <button
             onClick={handleSummarize}
             disabled={loading || selectedFiles.length === 0}
@@ -461,6 +536,88 @@ export default function FolderUploader() {
             {loading ? "Processing..." : "Generate Context"}
           </button>
         </div>
+
+        {/* Bottom Panel for Selected Files */}
+        {selectedFiles.length > 0 && (
+          <div style={{
+            height: isBottomPanelOpen ? `${bottomPanelHeight}px` : "40px",
+            background: "#0f172a", // Darker (was #1e293b)
+            borderTop: "2px solid #334155",
+            display: "flex",
+            flexDirection: "column",
+            transition: isResizingBottom.current ? "none" : "height 0.3s ease",
+            position: "relative",
+            zIndex: 60
+          }}>
+            {/* Resize Handle */}
+            <div
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                isResizingBottom.current = true;
+                document.body.style.cursor = "ns-resize";
+                document.body.style.userSelect = "none";
+              }}
+              style={{
+                position: "absolute",
+                top: "-5px",
+                left: 0,
+                width: "100%",
+                height: "10px",
+                cursor: "ns-resize",
+                zIndex: 70,
+                background: "transparent"
+              }}
+            />
+
+            {/* Header */}
+            <div
+              onClick={() => setIsBottomPanelOpen(!isBottomPanelOpen)}
+              style={{
+                padding: "10px 20px",
+                background: "#334155",
+                color: "#f8fafc",
+                fontSize: "0.9rem",
+                fontWeight: 600,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                cursor: "pointer",
+                borderBottom: isBottomPanelOpen ? "1px solid #475569" : "none"
+              }}
+            >
+              <span>Selected Files ({selectedFiles.length})</span>
+              {isBottomPanelOpen ? <FaChevronDown /> : <FaChevronRight style={{ transform: "rotate(-90deg)" }} />}
+            </div>
+
+            {/* Content */}
+            {isBottomPanelOpen && (
+              <div style={{ flex: 1, overflowY: "auto", padding: "10px" }}>
+                {selectedFiles.map((file, idx) => (
+                  <div key={idx} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "8px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: "6px",
+                    marginBottom: "6px"
+                  }}>
+                    <span style={{
+                      color: "#e2e8f0", fontSize: "0.85rem",
+                      whiteSpace: "normal", // Allow wrapping
+                      wordBreak: "break-all", // Break long words
+                      marginRight: "10px"
+                    }}>
+                      {file.name}
+                    </span>
+                    <button
+                      onClick={() => setSelectedFiles(prev => prev.filter(f => f !== file))}
+                      style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", padding: "4px" }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Resize Handle */}
@@ -480,113 +637,124 @@ export default function FolderUploader() {
         <div style={{ width: "1px", height: "100%", background: "#e9ecef" }}></div>
       </div>
 
-      {/* Right Panel: Output */}
-      <div style={{ flex: 1, background: "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}> {/* Dark Blue Theme */}
+      {/* Right Panel: Generated Context */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#112240", position: "relative", overflow: "hidden" }}>
 
-        {/* Content Area */}
-        <div style={{ flex: 1, overflow: "auto", position: "relative" }}>
+        {/* Watermark for Generated Context */}
+        <div style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "60%",
+          height: "60%",
+          backgroundImage: "url('/assets/PromptByCode.png')",
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "center",
+          backgroundSize: "contain",
+          opacity: 0.03, // Highly transparent (Highle opace?)
+          pointerEvents: "none",
+          zIndex: 0
+        }} />
 
-          {/* Sticky Toolbar */}
-          <div style={{
-            position: "sticky",
-            top: 0,
-            zIndex: 50,
-            padding: "15px 30px",
-            background: "rgba(15, 23, 42, 0.9)", // Dark blue glassmorphism
-            backdropFilter: "blur(12px)",
-            borderBottom: "1px solid rgba(59, 130, 246, 0.2)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            height: "70px",
-            transition: "all 0.3s ease",
-          }}>
-            <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 600, color: "#e0e0e0" }}>Generated Context</h2>
-            {summary && (
-              <button
-                onClick={handleCopy}
-                style={{
-                  padding: "8px 16px",
-                  background: copying ? "#10b981" : "rgba(59, 130, 246, 0.2)",
-                  border: `1px solid ${copying ? "#10b981" : "rgba(59, 130, 246, 0.4)"}`,
-                  color: "#ffffff",
-                  borderRadius: "20px",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
+        {/* Header */}
+        <div style={{
+          padding: "15px 30px",
+          background: "#112240", // Match body
+          borderBottom: "1px solid #233554",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+          zIndex: 1
+        }}>
+          <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 600, color: "#f8fafc" }}>Generated Context</h2>
+          {summary && (
+            <button
+              onClick={handleCopy}
+              style={{
+                padding: "8px 16px",
+                background: copying ? "#10b981" : "#e0f2fe",
+                border: `1px solid ${copying ? "#10b981" : "#90cdf4"}`,
+                color: copying ? "#ffffff" : "#2563eb",
+                borderRadius: "20px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "0.9rem",
+                fontWeight: 600,
+                transition: "all 0.2s ease",
+                boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+                animation: "float 3s ease-in-out infinite",
+              }}
+            >
+              {copying ? <FaCheck /> : <FaCopy />}
+              {copying ? "Copied!" : "Copy"}
+            </button>
+          )}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, padding: "30px", overflowY: "auto", position: "relative", zIndex: 1 }}>
+          {error && (
+            <div style={{
+              background: "rgba(239, 68, 68, 0.1)",
+              border: "1px solid #ef4444",
+              color: "#b91c1c",
+              padding: "16px",
+              margin: "0 0 20px 0",
+              borderRadius: "8px",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+            }}>
+              <FaExclamationCircle size={20} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {loading ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "#cbd5e1" }}>
+              <FaSpinner className="spin" size={40} color="#3b82f6" />
+              <p style={{ marginTop: "20px", fontWeight: 500 }}>Generating summary...</p>
+            </div>
+          ) : summary ? (
+            <div style={{ maxWidth: "900px", margin: "0 auto" }}>
+              <div style={{
+                background: "#0f172a", // Dark card
+                padding: "30px",
+                borderRadius: "12px",
+                boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.1)",
+                border: "1px solid #334155",
+                overflowX: "auto" // Allow horizontal scroll if needed
+              }}>
+                <pre style={{
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word", // Force wrap long words
+                  fontFamily: "'Fira Code', 'Consolas', monospace",
                   fontSize: "0.9rem",
-                  fontWeight: 600,
-                  transition: "all 0.2s ease",
-                  boxShadow: "0 4px 15px rgba(0,0,0,0.2)",
-                  animation: "float 3s ease-in-out infinite",
-                }}
-              >
-                {copying ? <FaCheck /> : <FaCopy />}
-                {copying ? "Copied!" : "Copy"}
-              </button>
-            )}
-          </div>
-
-          <div style={{ padding: "0" }}>
-            {error && (
-              <div style={{
-                background: "rgba(239, 68, 68, 0.1)",
-                border: "1px solid #ef4444",
-                color: "#fca5a5",
-                padding: "16px",
-                margin: "20px",
-                borderRadius: "8px",
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-              }}>
-                <FaExclamationCircle size={20} />
-                <span>{error}</span>
+                  lineHeight: "1.6",
+                  color: "#e2e8f0", // Light text
+                  margin: 0
+                }}>
+                  <code className="language-markdown">{summary}</code>
+                </pre>
               </div>
-            )}
-
-            {!summary && !loading && !error && (
-              <div style={{
-                height: "60vh",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#94a3b8",
-                opacity: 0.8,
-              }}>
-                <div style={{ fontSize: "4rem", marginBottom: "20px" }}>✨</div>
-                <p style={{ fontSize: "1.1rem" }}>Select files and click "Generate Context" to see the magic.</p>
-              </div>
-            )}
-
-            {summary && (
-              <div style={{
-                background: "linear-gradient(180deg, #0f172a 0%, #1e293b 100%)", // Matching dark blue
-                minHeight: "100%",
-              }}>
-                <pre
-                  className="language-javascript"
-                  style={{
-                    margin: 0,
-                    padding: "20px 30px",
-                    fontSize: "0.95rem",
-                    lineHeight: "1.6",
-                    fontFamily: "'Fira Code', monospace",
-                    background: "transparent",
-                    color: "#e2e8f0",
-                    textShadow: "none",
-                  }}
-                  dangerouslySetInnerHTML={{
-                    __html: Prism.highlight(summary, Prism.languages.javascript, "javascript"),
-                  }}
-                />
-              </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "#94a3b8",
+              textAlign: "center", maxWidth: "500px", margin: "0 auto"
+            }}>
+              <FaFileCode size={60} color="#334155" style={{ marginBottom: "20px" }} />
+              <h3 style={{ margin: "0 0 10px 0", color: "#cbd5e1" }}>Ready to Summarize</h3>
+              <p style={{ color: "#94a3b8" }}>Select files from the left panel and click "Generate Context" to create a comprehensive summary.</p>
+            </div>
+          )}
         </div>
       </div>
+
 
       {/* Global Styles & Animations */}
       <style>{`
