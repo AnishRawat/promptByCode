@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FaCopy, FaCheck, FaSun, FaMoon, FaCloud, FaExclamationCircle, FaSpinner, FaFileCode, FaBars } from 'react-icons/fa';
 import ModelSelector from '../UI/ModelSelector.jsx';
+import MarkdownRenderer from '../MarkdownRenderer.jsx';
 
 const MainContent = ({
     summary,
@@ -201,24 +202,14 @@ const MainContent = ({
                     ) : summary ? (
                         <div style={{ maxWidth: "900px", margin: "0 auto" }}>
                             <div style={{
-                                background: currentTheme.panelBg, // Force dark background for code readability
+                                background: currentTheme.panelBg,
                                 padding: "30px",
                                 borderRadius: "12px",
                                 boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.1)",
-                                border: "1px solid rgba(255, 255, 255, 0.1)",
-                                overflowX: "auto" // Allow horizontal scroll if needed
+                                border: `1px solid ${currentTheme.panelBorder}`,
+                                overflowX: "auto"
                             }}>
-                                <pre style={{
-                                    whiteSpace: "pre-wrap",
-                                    wordBreak: "break-word", // Force wrap long words
-                                    fontFamily: "'Fira Code', 'Consolas', monospace",
-                                    fontSize: "0.9rem",
-                                    lineHeight: "1.6",
-                                    color: currentTheme.text, // Force light text
-                                    margin: 0
-                                }}>
-                                    <code className="language-markdown" style={{ color: currentTheme.text, textShadow: "none", whiteSpace: "unset" }}>{summary}</code>
-                                </pre>
+                                <MarkdownRenderer content={summary} currentTheme={currentTheme} activeTheme={activeTheme} />
                             </div>
                         </div>
                     ) : (
