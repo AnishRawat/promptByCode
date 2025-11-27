@@ -53,7 +53,7 @@ const TreeNode = ({ node, selectedFiles, setSelectedFiles, themeColors, level = 
   };
 
   return (
-    <div style={{ userSelect: "none" }}>
+    <div style={{ userSelect: "none", minWidth: "100%", width: "fit-content" }}>
       <div
         onClick={handleNodeClick}
         style={{
@@ -66,6 +66,9 @@ const TreeNode = ({ node, selectedFiles, setSelectedFiles, themeColors, level = 
           background: isSelected ? themeColors.selectedBg : "transparent",
           borderLeft: isSelected ? `3px solid ${themeColors.selectedBorder}` : "3px solid transparent",
           color: isSelected ? themeColors.selectedText : themeColors.text,
+          whiteSpace: "nowrap",
+          minWidth: "100%",
+          width: "fit-content"
         }}
         onMouseEnter={(e) => {
           if (!isSelected) e.currentTarget.style.background = themeColors.hoverBg;
@@ -94,7 +97,7 @@ const TreeNode = ({ node, selectedFiles, setSelectedFiles, themeColors, level = 
 
       {/* Recursively render children */}
       {!node.isFile && isOpen && node.children && (
-        <div style={{ overflow: "hidden" }}>
+        <div style={{ minWidth: "100%", width: "fit-content" }}>
           {node.children.map((child) => (
             <TreeNode
               key={child.id || child.path}
@@ -123,7 +126,7 @@ const FileTree = ({ tree, selectedFiles, setSelectedFiles, themeColors }) => {
   }
 
   return (
-    <div style={{ padding: "10px 0" }}>
+    <div style={{ padding: "10px 0", minWidth: "100%", width: "fit-content" }}>
       {tree.children.map((node) => (
         <TreeNode
           key={node.id || node.path}

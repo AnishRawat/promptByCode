@@ -307,7 +307,7 @@ const Sidebar = ({
                                 <div style={{
                                     position: "absolute",
                                     inset: 0,
-                                    overflowY: "auto",
+                                    overflow: "auto",
                                     padding: "10px 12px",
                                     background: currentTheme.inputBg,
                                     transition: "all 0.3s ease"
