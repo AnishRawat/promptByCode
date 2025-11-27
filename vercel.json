@@ -19,6 +19,10 @@
             "dest": "/api/summarize.js"
         },
         {
+            "src": "/api/weather-theme",
+            "dest": "/api/weather-theme.js"
+        },
+        {
             "src": "/(.*)",
             "dest": "/frontend/$1"
         }

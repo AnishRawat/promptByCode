@@ -1,11 +1,15 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
+import dotenv from "dotenv";
 
+dotenv.config();
+
+console.log("Loaded KEY:", process.env.GEMINI_API_KEY);
+
+// Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Using gemini-1.5-pro for better stability with code analysis
-// This model has better support and handles large contexts well
-const model = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash",
+const geminiModel = genAI.getGenerativeModel({
+  model: "gemini-1.5-pro",
   generationConfig: {
     temperature: 0.7,
     topK: 40,
@@ -14,11 +18,37 @@ const model = genAI.getGenerativeModel({
   }
 });
 
-export async function askLLM(prompt) {
+// Initialize Groq
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+export async function askLLM(prompt, model = "gemini") {
   try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    let text = "";
+
+    console.log(`🔍 askLLM called with model: '${model}'`);
+    console.log(`🔑 Gemini Key Present: ${!!process.env.GEMINI_API_KEY}`);
+    console.log(`🔑 Groq Key Present: ${!!process.env.GROQ_API_KEY}`);
+
+    if (model === "groq") {
+      console.log("🚀 Using Groq Model (llama3-70b-8192)...");
+      const completion = await groq.chat.completions.create({
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        model: "llama3-70b-8192",
+        temperature: 0.7,
+        max_tokens: 8192,
+      });
+      text = completion.choices[0]?.message?.content || "";
+    } else {
+      console.log("✨ Using Gemini Model (gemini-1.5-pro)...");
+      const result = await geminiModel.generateContent(prompt);
+      const response = await result.response;
+      text = response.text();
+    }
 
     // Check if response is empty
     if (!text || text.trim().length === 0) {
@@ -27,14 +57,14 @@ export async function askLLM(prompt) {
 
     return text;
   } catch (err) {
-    console.error("Gemini API Error:", err);
+    console.error(`${model === "groq" ? "Groq" : "Gemini"} API Error:`, err);
     console.error("Error message:", err.message);
 
     // Provide more helpful error messages
     if (err.message && err.message.includes("404")) {
-      throw new Error("Gemini model not found. Please check your API key has access to gemini-1.5-pro");
+      throw new Error("Model not found. Please check your API key and model availability.");
     }
 
-    throw new Error(`Gemini API failed: ${err.message}`);
+    throw new Error(`AI Model failed: ${err.message}`);
   }
 }

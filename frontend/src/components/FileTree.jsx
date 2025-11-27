@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { FaFolder, FaFolderOpen, FaFileCode, FaFile, FaFileAlt, FaChevronRight, FaChevronDown } from "react-icons/fa";
 
 // Recursive component for rendering tree nodes
-const TreeNode = ({ node, selectedFiles, setSelectedFiles, level = 0 }) => {
+const TreeNode = ({ node, selectedFiles, setSelectedFiles, themeColors, level = 0 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   // Determine if the current node is selected
@@ -63,18 +63,18 @@ const TreeNode = ({ node, selectedFiles, setSelectedFiles, level = 0 }) => {
           paddingLeft: `${level * 20 + 12}px`,
           cursor: "pointer",
           transition: "all 0.2s ease",
-          background: isSelected ? "rgba(0, 123, 255, 0.1)" : "transparent",
-          borderLeft: isSelected ? "3px solid #007bff" : "3px solid transparent",
-          color: isSelected ? "#007bff" : "#495057",
+          background: isSelected ? themeColors.selectedBg : "transparent",
+          borderLeft: isSelected ? `3px solid ${themeColors.selectedBorder}` : "3px solid transparent",
+          color: isSelected ? themeColors.selectedText : themeColors.text,
         }}
         onMouseEnter={(e) => {
-          if (!isSelected) e.currentTarget.style.background = "#f8f9fa";
+          if (!isSelected) e.currentTarget.style.background = themeColors.hoverBg;
         }}
         onMouseLeave={(e) => {
           if (!isSelected) e.currentTarget.style.background = "transparent";
         }}
       >
-        <span style={{ marginRight: "8px", display: "flex", alignItems: "center", fontSize: "0.9em", color: "#adb5bd" }}>
+        <span style={{ marginRight: "8px", display: "flex", alignItems: "center", fontSize: "0.9em", color: themeColors.textMuted }}>
           {!node.isFile && (
             isOpen ? <FaChevronDown /> : <FaChevronRight />
           )}
@@ -101,6 +101,7 @@ const TreeNode = ({ node, selectedFiles, setSelectedFiles, level = 0 }) => {
               node={child}
               selectedFiles={selectedFiles}
               setSelectedFiles={setSelectedFiles}
+              themeColors={themeColors}
               level={level + 1}
             />
           ))}
@@ -111,10 +112,10 @@ const TreeNode = ({ node, selectedFiles, setSelectedFiles, level = 0 }) => {
 };
 
 // Main FileTree component
-const FileTree = ({ tree, selectedFiles, setSelectedFiles }) => {
+const FileTree = ({ tree, selectedFiles, setSelectedFiles, themeColors }) => {
   if (!tree || !tree.children || tree.children.length === 0) {
     return (
-      <div style={{ padding: "40px 20px", textAlign: "center", color: "#adb5bd" }}>
+      <div style={{ padding: "40px 20px", textAlign: "center", color: themeColors.textMuted }}>
         <div style={{ fontSize: "3em", marginBottom: "10px", opacity: 0.5 }}>📂</div>
         <p style={{ margin: 0, fontSize: "0.95em" }}>No files loaded</p>
       </div>
@@ -129,6 +130,7 @@ const FileTree = ({ tree, selectedFiles, setSelectedFiles }) => {
           node={node}
           selectedFiles={selectedFiles}
           setSelectedFiles={setSelectedFiles}
+          themeColors={themeColors}
         />
       ))}
     </div>

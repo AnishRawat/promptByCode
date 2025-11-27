@@ -1,14 +1,13 @@
 // listModels.js
 import { GoogleGenerativeAI } from "@google/generative-ai";
-// import dotenv from "dotenv";
-// dotenv.config(); // Load environment variables from .env
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+import dotenv from "dotenv";
+dotenv.config(); // Load environment variables from .env
 
 async function listAvailableModels() {
   console.log("--- Listing available Google Generative AI models ---");
   let foundFlashModel = false;
   try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const models = await genAI.listModels();
     for await (const model of models) {
       if (model.supportedGenerationMethods && model.supportedGenerationMethods.includes("generateContent")) {
